@@ -20,17 +20,14 @@ const CONNPASS_REQUEST = `https://connpass.com/api/v1/event/?series_id=${CONNPAS
 // https://connpass.com/about/api/
 
 /**
- * トリガー
+ * GASで設定するトリガー関数
  */
 const getLineDCEvents = () => {
   const response = UrlFetchApp.fetch(CONNPASS_REQUEST);
   const json = JSON.parse(response.getContentText());
 
-  const now = new Date();
-  now.setHours(now.getHours() + 9);
-
-  // "2022-11-18T19:00:00+09:00";//
-  const isoNow = new Date(now).toISOString().split(".")[0] + "+09:00";
+  // ISO8601 形式で現在時刻を取得
+  const isoNow = getNowDateIso();
 
   // 終了イベントを削除
   deletePassedEvents(isoNow);
@@ -40,6 +37,14 @@ const getLineDCEvents = () => {
 
   // 新規登録イベントを通知
   notifyNewEvents(json.events, isoNow);
+};
+
+const getNowDateIso = () => {
+  const now = new Date();
+  now.setHours(now.getHours() + 9);
+
+  // "2022-11-18T19:00:00+09:00";//
+  return new Date(now).toISOString().split(".")[0] + "+09:00";
 };
 
 /**
@@ -58,6 +63,11 @@ const deletePassedEvents = (isoNow) => {
       deleteTargetEventRowIds.push(currentRowId);
     }
   });
+
+  if (deleteTargetEventRowIds.length === 0) {
+    // 削除対象がなければ何もしない
+    return;
+  }
 
   deleteTargetEventRowIds.reverse().forEach((id) => {
     // 下の行から削除
@@ -84,30 +94,33 @@ const notifyTomorrowEvents = (isoNow) => {
       "yyyy/MM/dd"
     );
 
-    if (eventDate === tomorrow) {
-      const ogImage = getOgImage(e[ClmIndex.EventUrl - 1]);
-      const date = Utilities.formatDate(
-        new Date(e[ClmIndex.StartedAt - 1]),
-        "GMT+9",
-        "yyyy/MM/dd hh:mm:ss"
-      );
-
-      const param = {
-        thumbnailImageUrl: ogImage,
-        imageBackgroundColor: LINE_COLOR_CODE,
-        title: e[ClmIndex.Title - 1].substr(0, CAROUSEL_TITLE_MAX_LENGTH),
-        text: `日時 ${date}`,
-        actions: [
-          {
-            type: "uri",
-            label: "イベントページへ",
-            uri: e[ClmIndex.EventUrl - 1],
-          },
-        ],
-      };
-
-      carouselContents.push(param);
+    if (eventDate !== tomorrow) {
+      return;
     }
+
+    // イベントURLをもとにHTMLを解析しogImageを取得。カルーセルのサムネイルに使っている
+    const ogImage = getOgImage(e[ClmIndex.EventUrl - 1]);
+    const date = Utilities.formatDate(
+      new Date(e[ClmIndex.StartedAt - 1]),
+      "GMT+9",
+      "yyyy/MM/dd hh:mm:ss"
+    );
+
+    const param = {
+      thumbnailImageUrl: ogImage,
+      imageBackgroundColor: LINE_COLOR_CODE,
+      title: e[ClmIndex.Title - 1].substr(0, CAROUSEL_TITLE_MAX_LENGTH),
+      text: `日時 ${date}`,
+      actions: [
+        {
+          type: "uri",
+          label: "イベントページへ",
+          uri: e[ClmIndex.EventUrl - 1],
+        },
+      ],
+    };
+
+    carouselContents.push(param);
   });
 
   if (carouselContents.length === 0) {
@@ -135,13 +148,13 @@ const notifyNewEvents = (connpassEvents, isoNow) => {
   const currentMsec = new Date(isoNow).getTime();
 
   // 既にシートに登録されているイベント or 過去のイベントは除外
-  connpassEvents.forEach((ce) => {
+  connpassEvents.forEach((connpassEvent) => {
     const targetMsec = new Date(ce.started_at).getTime();
     if (
-      eventList.map((e) => e.eventId).indexOf(ce.event_id) === -1 &&
+      eventList.map((e) => e.eventId).indexOf(connpassEvent.event_id) === -1 &&
       targetMsec > currentMsec
     ) {
-      filteredConnpassEvents.push(ce);
+      filteredConnpassEvents.push(connpassEvent);
     }
   });
 
