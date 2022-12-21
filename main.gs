@@ -149,7 +149,7 @@ const notifyNewEvents = (connpassEvents, isoNow) => {
 
   // 既にシートに登録されているイベント or 過去のイベントは除外
   connpassEvents.forEach((connpassEvent) => {
-    const targetMsec = new Date(ce.started_at).getTime();
+    const targetMsec = new Date(connpassEvent.started_at).getTime();
     if (
       eventList.map((e) => e.eventId).indexOf(connpassEvent.event_id) === -1 &&
       targetMsec > currentMsec
